@@ -1,10 +1,6 @@
-// Import Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-// 🔥 Replace with your own config
+// Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyB9fDC9MswOZn_HHyR4mUcnaT66dTpHEUU",
+    apiKey: "AIzaSyB9fDC9MswOZn_HHyR4mUcnaT66dTpHEUU",
       authDomain: "mpm-webdb.firebaseapp.com",
       projectId: "mpm-webdb",
       storageBucket: "mpm-webdb.firebasestorage.app",
@@ -13,25 +9,77 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-// 🧠 Load trivia questions
-async function loadQuestions() {
-  const querySnapshot = await getDocs(collection(db, "triviaQuestions"));
-  const questions = [];
-  querySnapshot.forEach((doc) => {
-    questions.push(doc.data());
+let questions = [];
+let currentQuestionIndex = 0;
+let score = 0;
+
+// Fetch questions from Firestore
+db.collection('triviaQuestions').get().then(snapshot => {
+  questions = snapshot.docs.map(doc => doc.data());
+  showQuestion();
+});
+
+// Show current question
+function showQuestion() {
+  if(currentQuestionIndex >= questions.length) {
+    alert(Trivia over! Your score: ${score});
+    return;
+  }
+  const q = questions[currentQuestionIndex];
+  document.getElementById('question').textContent = q.question;
+
+  const optionsDiv = document.getElementById('options');
+  optionsDiv.innerHTML = '';
+  q.options.forEach(option => {
+    const btn = document.createElement('button');
+    btn.textContent = option;
+    btn.onclick = () => checkAnswer(option);
+    optionsDiv.appendChild(btn);
   });
-  console.log("Questions loaded:", questions);
-  // TODO: Display them on page
 }
 
-// 🏆 Save leaderboard entry
-async function saveScore(username, score) {
-  await addDoc(collection(db, "leaderboard"), { username, score });
-  alert("Your score has been saved!");
+// Check answer
+function checkAnswer(selected) {
+  if(selected === questions[currentQuestionIndex].answer) {
+    score++;
+    document.getElementById('score').textContent = score;
+  }
+  currentQuestionIndex++;
+  showQuestion();
 }
 
-// Start loading
-loadQuestions();
+// Submit score to Firestore
+document.getElementById('submit-score').addEventListener('click', () => {
+  const name = document.getElementById('username').value;
+  if(!name) return alert('Enter your name');
+  
+  db.collection('triviaScores').add({
+    name: name,
+    score: score,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    alert('Score submitted!');
+    loadLeaderboard();
+  });
+});
+
+// Load leaderboard
+function loadLeaderboard() {
+  db.collection('triviaScores').orderBy('score', 'desc').limit(10).get()
+    .then(snapshot => {
+      const tbody = document.getElementById('leaderboard-body');
+      tbody.innerHTML = '';
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const tr = document.createElement('tr');
+        tr.innerHTML = <td>${data.name}</td><td>${data.score}</td>;
+        tbody.appendChild(tr);
+      });
+    });
+}
+
+// Load leaderboard initially
+loadLeaderboard();
